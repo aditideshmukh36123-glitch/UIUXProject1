@@ -10,12 +10,11 @@ export const Hero: React.FC<HeroProps> = ({ onViewWork }) => {
   const textRef = useRef<HTMLHeadingElement>(null);
   const subtitleRef = useRef<HTMLParagraphElement>(null);
   const heroContentRef = useRef<HTMLDivElement>(null);
-  const morphTextRef = useRef<HTMLDivElement>(null);
 
   // Position and state references (no React re-renders during 60fps tracking)
   const targetPos = useRef({ x: 0, y: 0 });
   const currentPos = useRef({ x: 0, y: 0 });
-  const radiusRef = useRef(68);
+  const radiusRef = useRef(80);
   const hasUserInteracted = useRef(false);
   const scrollProgressRef = useRef(0);
 
@@ -24,27 +23,27 @@ export const Hero: React.FC<HeroProps> = ({ onViewWork }) => {
     const circle = circleRef.current;
     if (!container || !circle) return;
 
-    // Fluid responsive spotlight radius: noticeably larger on mobile, bold and immersive on laptop & desktop
+    // Fluid responsive spotlight radius: tailored to cover AN + half of second N and Graphic Designer
     const computeFluidRadius = () => {
       const width = window.innerWidth;
 
       if (width < 360) {
-        // Compact phones (320px): 148px diameter
-        return 74;
+        // Compact phones (320px): slightly larger on mobile (~168px diameter)
+        return 84;
       } else if (width < 450) {
-        // Standard to large phones (360px - 430px): 160px - 184px diameter
-        return Math.round(80 + ((width - 360) / 90) * 12);
+        // Standard to large phones (360px - 430px): slightly larger on mobile (184px - 212px diameter)
+        return Math.round(92 + ((width - 360) / 90) * 14);
       } else if (width < 768) {
-        // Phablets & small tablets: 200px - 260px diameter
-        return Math.round(100 + ((width - 450) / 318) * 30);
+        // Phablets & small tablets: slightly adjusted mobile/phablet range
+        return Math.round(112 + ((width - 450) / 318) * 24);
       } else if (width < 1024) {
-        // Tablets & small laptops: 240px - 296px diameter
+        // Tablets & small laptops: 240px - 296px diameter (UNTOUCHED)
         return Math.round(120 + ((width - 768) / 256) * 28);
       } else if (width < 1440) {
-        // Laptops (1024px - 1440px): 300px - 372px diameter, balanced with ANNIE typography
+        // Laptops (1024px - 1440px): 300px - 372px diameter, balanced with ANNIE typography (UNTOUCHED)
         return Math.round(150 + ((width - 1024) / 416) * 36);
       } else {
-        // Large desktops (1440px+): 380px - 430px diameter
+        // Large desktops (1440px+): 380px - 430px diameter (UNTOUCHED)
         return Math.min(215, Math.round(190 + ((width - 1440) / 480) * 22));
       }
     };
@@ -60,30 +59,19 @@ export const Hero: React.FC<HeroProps> = ({ onViewWork }) => {
 
     // Responsive default initial position:
     // Positioned so the reveal area covers approximately "AN" and half of the second "N" in ANNIE,
-    // does NOT cover the entire upper part of ANNIE, and extends downward to reveal part of Graphic Designer.
+    // and extends downward to reveal part of Graphic Designer.
     const computeDefaultPosition = () => {
-      if (!containerRef.current || !textRef.current || !subtitleRef.current) {
+      if (!textRef.current || !subtitleRef.current) {
         return { x: 120, y: 180 };
       }
 
-      const containerRect = containerRef.current.getBoundingClientRect();
       const textRect = textRef.current.getBoundingClientRect();
       const width = window.innerWidth;
       const isMobile = width < 768;
 
-      // Horizontal: centered through ~22% of ANNIE's width
-      // This illuminates from the start of "A", across "N", through the first half of the second "N",
-      // leaving the remaining letters in their normal warm-white appearance.
-      const initialX = textRect.left - containerRect.left + textRect.width * 0.22;
-
-      // Vertical: positioned relative to text so the circle does NOT cover the entire upper part of ANNIE,
-      // and extends down into "Graphic Designer"
-      let initialY: number;
-      if (isMobile) {
-        initialY = textRect.top - containerRect.top + textRect.height * 0.68;
-      } else {
-        initialY = textRect.top - containerRect.top + textRect.height * 0.64;
-      }
+      // In viewport coordinates (since circle is fixed)
+      const initialX = textRect.left + textRect.width * 0.22;
+      const initialY = textRect.top + textRect.height * (isMobile ? 0.68 : 0.64);
 
       return { x: initialX, y: initialY };
     };
@@ -98,7 +86,7 @@ export const Hero: React.FC<HeroProps> = ({ onViewWork }) => {
     // Refine default position once custom fonts are loaded (if user hasn't moved pointer yet)
     if ('fonts' in document) {
       document.fonts.ready.then(() => {
-        if (!hasUserInteracted.current && containerRef.current && circleRef.current) {
+        if (!hasUserInteracted.current && circleRef.current && textRef.current) {
           const refined = computeDefaultPosition();
           targetPos.current = { x: refined.x, y: refined.y };
           currentPos.current = { x: refined.x, y: refined.y };
@@ -108,66 +96,54 @@ export const Hero: React.FC<HeroProps> = ({ onViewWork }) => {
       });
     }
 
-    // Passive scroll listener for smooth cinematic transition into the next section
+    // Passive scroll listener for smooth cinematic transition into the second section
     const onScroll = () => {
       const sy = window.scrollY;
       const vh = window.innerHeight || 800;
-      // Only transition when user explicitly scrolls past top threshold (> 20px)
-      const progress = Math.min(1, Math.max(0, (sy - 20) / (vh * 0.7)));
+      // Scroll progress from 0 (top of hero) down into the second section (reaches 1.0 when fully scrolled into intro)
+      const progress = Math.min(1, Math.max(0, (sy - 10) / (vh * 0.85)));
       scrollProgressRef.current = progress;
     };
 
-    // 60-120fps GPU animation loop with fluid easing and scroll morph
+    // 60-120fps GPU animation loop with fluid easing and scroll expansion
     let animId: number;
     const animate = () => {
       const sp = scrollProgressRef.current;
+      const vh = window.innerHeight || 800;
+      const vw = window.innerWidth || 1200;
 
-      if (sp > 0.02) {
-        // As user scrolls: spotlight gathers toward center, contracts, and morphs into ANNIE
-        const containerW = container.clientWidth;
-        const containerH = container.clientHeight;
-        const centerX = containerW / 2;
-        const centerY = containerH * 0.44;
+      if (sp > 0.005) {
+        // As user scrolls or clicks "View Work":
+        // The EXACT SAME circle continues smoothly from the hero into the second section,
+        // and expands outward to reveal the warm off-white background and invert typography
+        const centerX = vw * 0.42;
+        const centerY = vh * 0.46;
 
-        // Smoothly blend pointer target toward center
+        // Smoothly blend pointer target toward center of second section
         const effTargetX = targetPos.current.x * (1 - sp) + centerX * sp;
         const effTargetY = targetPos.current.y * (1 - sp) + centerY * sp;
 
-        currentPos.current.x += (effTargetX - currentPos.current.x) * 0.24;
-        currentPos.current.y += (effTargetY - currentPos.current.y) * 0.24;
+        currentPos.current.x += (effTargetX - currentPos.current.x) * 0.22;
+        currentPos.current.y += (effTargetY - currentPos.current.y) * 0.22;
 
-        // Contract radius & morph shape
-        const scale = Math.max(0.12, 1 - sp * 0.85);
         const baseR = radiusRef.current;
-        const curR = baseR * scale;
+        const maxScale = (Math.hypot(vw, vh) * 1.1) / (baseR * 2);
 
-        // Lose circular shape, gather inward toward typography
-        const borderRadius = `${Math.max(12, 50 - sp * 45)}%`;
-        circle.style.borderRadius = borderRadius;
+        // Progressively expand outward as scrolling continues
+        const expansionFactor = Math.pow(sp, 1.25);
+        const currentScale = 1 + (maxScale - 1) * expansionFactor;
 
-        const x = currentPos.current.x - curR;
-        const y = currentPos.current.y - curR;
+        const x = currentPos.current.x - baseR;
+        const y = currentPos.current.y - baseR;
 
-        circle.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${scale.toFixed(3)})`;
-        circle.style.opacity = `${Math.max(0, 1 - sp * 1.15).toFixed(2)}`;
-
-        // Fade out original hero text
-        if (heroContentRef.current) {
-          heroContentRef.current.style.opacity = `${Math.max(0, 1 - sp * 1.9).toFixed(2)}`;
-        }
-
-        // Morphing typography blooming from the center of the light
-        if (morphTextRef.current) {
-          const textOpacity = Math.min(1, Math.max(0, (sp - 0.22) * 2.4));
-          morphTextRef.current.style.opacity = textOpacity.toFixed(2);
-          morphTextRef.current.style.transform = `translate3d(0, ${((1 - sp) * 20).toFixed(1)}px, 0) scale(${(0.88 + sp * 0.12).toFixed(3)})`;
-        }
+        circle.style.borderRadius = '50%';
+        circle.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${currentScale.toFixed(3)})`;
+        circle.style.opacity = '1';
       } else {
-        // Standard interactive spotlight behavior: follows user pointer smoothly
+        // Standard interactive spotlight behavior at top of hero:
+        // Follows user pointer/touch smoothly with GPU acceleration
         circle.style.borderRadius = '50%';
         circle.style.opacity = '1';
-        if (heroContentRef.current) heroContentRef.current.style.opacity = '1';
-        if (morphTextRef.current) morphTextRef.current.style.opacity = '0';
 
         const dx = targetPos.current.x - currentPos.current.x;
         const dy = targetPos.current.y - currentPos.current.y;
@@ -191,13 +167,11 @@ export const Hero: React.FC<HeroProps> = ({ onViewWork }) => {
 
     animId = requestAnimationFrame(animate);
 
-    // Global and container pointer handlers for reliable movement tracking
+    // Global and container pointer handlers (in viewport coordinates for fixed spotlight)
     const handlePointerUpdate = (clientX: number, clientY: number) => {
-      if (!containerRef.current) return;
-      const cRect = containerRef.current.getBoundingClientRect();
       hasUserInteracted.current = true;
-      targetPos.current.x = clientX - cRect.left;
-      targetPos.current.y = clientY - cRect.top;
+      targetPos.current.x = clientX;
+      targetPos.current.y = clientY;
     };
 
     const onPointerMove = (e: PointerEvent) => {
@@ -226,35 +200,32 @@ export const Hero: React.FC<HeroProps> = ({ onViewWork }) => {
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('pointermove', onPointerMove, { passive: true });
     window.addEventListener('pointerdown', onPointerMove, { passive: true });
-    container.addEventListener('touchmove', onTouchMove, { passive: true });
-    container.addEventListener('touchstart', onTouchMove, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchstart', onTouchMove, { passive: true });
 
     return () => {
       window.removeEventListener('resize', onResize);
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerdown', onPointerMove);
-      container.removeEventListener('touchmove', onTouchMove);
-      container.removeEventListener('touchstart', onTouchMove);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchstart', onTouchMove);
       cancelAnimationFrame(animId);
     };
   }, []);
 
   // React synthetic event handlers to ensure 100% responsiveness in all iframe environments
   const handlePointer = (e: React.PointerEvent) => {
-    if (!containerRef.current) return;
-    const cRect = containerRef.current.getBoundingClientRect();
     hasUserInteracted.current = true;
-    targetPos.current.x = e.clientX - cRect.left;
-    targetPos.current.y = e.clientY - cRect.top;
+    targetPos.current.x = e.clientX;
+    targetPos.current.y = e.clientY;
   };
 
   const handleTouch = (e: React.TouchEvent) => {
-    if (!e.touches[0] || !containerRef.current) return;
-    const cRect = containerRef.current.getBoundingClientRect();
+    if (!e.touches[0]) return;
     hasUserInteracted.current = true;
-    targetPos.current.x = e.touches[0].clientX - cRect.left;
-    targetPos.current.y = e.touches[0].clientY - cRect.top;
+    targetPos.current.x = e.touches[0].clientX;
+    targetPos.current.y = e.touches[0].clientY;
   };
 
   return (
@@ -264,34 +235,20 @@ export const Hero: React.FC<HeroProps> = ({ onViewWork }) => {
       onPointerDown={handlePointer}
       onTouchStart={handleTouch}
       onTouchMove={handleTouch}
-      className="relative w-full h-[100svh] min-h-[560px] flex flex-col justify-center pb-16 min-[375px]:pb-20 sm:pb-24 overflow-hidden select-none bg-[#000000] cursor-default"
+      className="relative w-full h-[100svh] min-h-[560px] flex flex-col justify-center pb-16 min-[375px]:pb-20 sm:pb-24 select-none bg-[#000000] cursor-default"
       style={{ touchAction: 'pan-y' }}
     >
-      {/* GPU-ACCELERATED REVEAL SPOTLIGHT (mix-blend-difference) */}
+      {/* THE SINGLE, ORIGINAL GPU-ACCELERATED SPOTLIGHT (mix-blend-difference, fixed across sections) */}
       <div 
         ref={circleRef}
-        className="absolute top-0 left-0 rounded-full bg-[#F4F0EA] pointer-events-none mix-blend-difference will-change-transform z-20"
+        className="fixed top-0 left-0 rounded-full bg-[#F8F7F3] pointer-events-none mix-blend-difference will-change-transform z-30"
         style={{
-          width: '136px',
-          height: '136px',
+          width: '160px',
+          height: '160px',
           transform: 'translate3d(-500px, -500px, 0)',
         }}
         aria-hidden="true"
       />
-
-      {/* CENTRAL MORPH TYPOGRAPHY (Emerges smoothly as light contracts and gathers during scroll) */}
-      <div 
-        ref={morphTextRef}
-        className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-15 opacity-0 will-change-transform"
-        aria-hidden="true"
-      >
-        <span className="font-display font-extrabold text-5xl min-[360px]:text-6xl sm:text-7xl md:text-8xl lg:text-[clamp(6.5rem,9.5vw,9rem)] xl:text-[clamp(8.5rem,11.5vw,11.5rem)] tracking-[-0.035em] text-[#F4F0EA] uppercase">
-          ANNIE
-        </span>
-        <span className="font-serif italic text-lg sm:text-2xl text-[#A69FAE] mt-2">
-          Graphic Designer
-        </span>
-      </div>
 
       {/* BASE TYPOGRAPHY CONTENT (pointer-events-none so cursor moves freely across letters) */}
       <div 
@@ -300,10 +257,10 @@ export const Hero: React.FC<HeroProps> = ({ onViewWork }) => {
       >
         <div className="flex flex-col items-start max-w-xl sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-none">
           
-          {/* ANNIE - Dominant typography */}
+          {/* ANNIE - Dominant typography (subtly increased by 10-15% on mobile breakpoints) */}
           <h1 
             ref={textRef}
-            className="font-display font-extrabold text-[2.75rem] min-[360px]:text-[3.25rem] min-[390px]:text-[3.75rem] min-[430px]:text-[4.25rem] sm:text-6xl md:text-7xl lg:text-[clamp(6.5rem,9.5vw,9rem)] xl:text-[clamp(8.5rem,11.5vw,11.5rem)] tracking-[-0.03em] lg:tracking-[-0.035em] leading-[0.92] lg:leading-[0.88] text-[#F4F0EA] uppercase m-0 p-0"
+            className="font-display font-extrabold text-[3.1rem] min-[360px]:text-[3.65rem] min-[390px]:text-[4.2rem] min-[430px]:text-[4.75rem] sm:text-6xl md:text-7xl lg:text-[clamp(6.5rem,9.5vw,9rem)] xl:text-[clamp(8.5rem,11.5vw,11.5rem)] tracking-[-0.03em] lg:tracking-[-0.035em] leading-[0.92] lg:leading-[0.88] text-[#F4F0EA] uppercase m-0 p-0"
           >
             ANNIE
           </h1>
@@ -316,8 +273,8 @@ export const Hero: React.FC<HeroProps> = ({ onViewWork }) => {
             Graphic Designer
           </p>
 
-          {/* View Work (Moved down slightly with generous vertical spacing, clearly outside spotlight) */}
-          <div className="mt-16 min-[360px]:mt-20 sm:mt-24 md:mt-28 pl-0.5 relative z-30 pointer-events-auto">
+          {/* View Work (Moved slightly lower on mobile with increased top spacing) */}
+          <div className="mt-20 min-[360px]:mt-24 min-[390px]:mt-28 sm:mt-24 md:mt-28 pl-0.5 relative z-40 pointer-events-auto">
             <button
               onClick={onViewWork}
               className="group inline-flex items-center gap-2.5 text-xs min-[390px]:text-[13px] uppercase tracking-[0.22em] font-medium text-[#F4F0EA] hover:opacity-75 border-b border-[#F4F0EA]/30 pb-1 transition-opacity cursor-pointer min-h-[44px]"
